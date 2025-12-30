@@ -2371,6 +2371,63 @@ static bool GDALGenerateVRTColorRelief(const char *pszDstFilename,
     return bOK;
 }
 
+
+/************************************************************************/
+/*                          GDALTerrainRgb                              */
+/************************************************************************/
+
+static CPLErr GDALTerrainRgb(GDALRasterBandH hSrcBand,
+    GDALRasterBandH hDstBandR,
+    GDALRasterBandH hDstBandG,
+    GDALRasterBandH hDstBandB,
+    GDALRasterBandH hDstBandA,
+    GDALProgressFunc pfnProgress,
+    void* pProgressData)
+{
+    // sanity check
+    if (hSrcBand == nullptr || hDstBandR == nullptr ||
+        hDstBandG == nullptr || hDstBandB == nullptr || hDstBandA == nullptr)
+        return CE_Failure;
+    if (pfnProgress == nullptr)
+        pfnProgress = GDALDummyProgress;
+
+    const int nXSize = GDALGetRasterBandXSize(hSrcBand);
+    const int nYSize = GDALGetRasterBandYSize(hSrcBand);
+
+    // allocate buffers
+    std::unique_ptr<float, VSIFreeReleaser> pafSourceBuf;
+    pafSourceBuf.reset(static_cast<float*>(
+        VSI_MALLOC2_VERBOSE(sizeof(float), nXSize)));
+    std::unique_ptr<GByte, VSIFreeReleaser> pabyDestBufR(
+        static_cast<GByte*>(VSI_MALLOC2_VERBOSE(4, nXSize)));
+
+    pfnProgress(0.0, nullptr, pProgressData);
+    for (int y = 0; y < nYSize; y++)
+    {
+        // Read line from source raster
+        CPLErr eErr = GDALRasterIO(
+            hSrcBand, GF_Read, 0, i, nXSize, 1,
+            static_cast<void*>(pafSourceBuf.get()),
+            nXSize, 1, GDT_Float32, 0, 0);
+        if (eErr != CE_None)
+            return eErr;
+
+        // Compute Terrain-RGB
+        for (int x = 0; x < nXSize; x++)
+        {
+            // TODO
+        }
+
+        // Write line to destination raster bands
+
+    }
+
+
+    return CE_None;
+}
+
+
+
 /************************************************************************/
 /*                         GDALTRIAlg()                                 */
 /************************************************************************/
@@ -3026,7 +3083,8 @@ typedef enum
     COLOR_RELIEF,
     TRI,
     TPI,
-    ROUGHNESS
+    ROUGHNESS,
+    TERRAIN_RGB,
 } Algorithm;
 
 static Algorithm GetAlgorithm(const char *pszProcessing)
@@ -3058,6 +3116,10 @@ static Algorithm GetAlgorithm(const char *pszProcessing)
     else if (EQUAL(pszProcessing, "roughness"))
     {
         return ROUGHNESS;
+    }
+    else if (EQUAL(pszProcessing, "terrain-rgb"))
+    {
+        return TERRAIN_RGB;
     }
     else
     {
@@ -3490,6 +3552,23 @@ static std::unique_ptr<GDALArgumentParser> GDALDEMAppOptionsGetParser(
 
     addCommonOptions(subCommandRoughness);
 
+    // Terrain-RGB
+
+    auto subCommandTerrainRgb = argParser->add_subparser(
+        "terrain-rgb", /* bForBinary=*/psOptionsForBinary != nullptr);
+    subCommandTerrainRgb->add_description(
+        _("Compute terrain-RGB elevation encoding"));
+    if (psOptionsForBinary)
+    {
+        subCommandTerrainRgb->add_argument("input_dem")
+            .store_into(psOptionsForBinary->osSrcFilename)
+            .help(_("The input DEM raster to be encoded."));
+        subCommandTerrainRgb->add_argument("output_terrain_rgb_map")
+            .store_into(psOptionsForBinary->osDstFilename)
+            .help(_("The output raster to be produced."));
+    }
+    addCommonOptions(subCommandTerrainRgb);
+
     return argParser;
 }
 
@@ -3546,7 +3625,7 @@ std::string GDALDEMAppGetParserUsage(const std::string &osProcessingMode)
  * @param pszDest the destination dataset path.
  * @param hSrcDataset the source dataset handle.
  * @param pszProcessing the processing to apply (one of "hillshade", "slope",
- * "aspect", "color-relief", "TRI", "TPI", "Roughness")
+ * "aspect", "color-relief", "TRI", "TPI", "Roughness", "terrain-rgb")
  * @param pszColorFilename color file (mandatory for "color-relief" processing,
  * should be NULL otherwise)
  * @param psOptionsIn the options struct returned by
@@ -4205,6 +4284,14 @@ GDALDatasetH GDALDEMProcessing(const char *pszDest, GDALDatasetH hSrcDataset,
                                              : nullptr,
                         pszColorFilename, psOptions->eColorSelectionMode,
                         pfnProgress, pProgressData);
+    }
+    else if (eUtilityMode == TERRAIN_RGB)
+    {
+        GDALTerrainRgb(hSrcBand,
+            GDALGetRasterBand(hDstDataset, 1),
+            GDALGetRasterBand(hDstDataset, 2),
+            GDALGetRasterBand(hDstDataset, 3),
+            pfnProgress, pProgressData);
     }
     else
     {
