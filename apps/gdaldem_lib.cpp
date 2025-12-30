@@ -2376,7 +2376,33 @@ static bool GDALGenerateVRTColorRelief(const char *pszDstFilename,
 /*                          GDALTerrainRgb                              */
 /************************************************************************/
 
+static void GDALTerrainRgbGetRGBA(float fEle,
+    bool bHasNoData, float fNoDataValue,
+    int *pnR, int *pnG, int *pngB, int *pngA)
+{
+    // encode elevation into R, G, B, A channels
+    if (bHasNoData && dfEle == fNoDataValue)
+    {
+        &pnR = &pnG = &pnB = &pnA = 0; // fully transparent
+    }
+    else
+    {
+        // Calculate integer value as
+        // ele = -10000 + ((R * 256 * 256 + G * 256 + B) * 0.1)
+        // => R*65536 + G*256 + B = 10 * (ele + 10000)
+        uint32_t nIntValue = (uint32_t)(10f * (fEle + 10000f));
+
+        // encode lower 24 bits into 8-bit R, G, B channels
+        &pnR = (nIntValue & 0x00ff0000) >> 16;
+        &pnG = (nIntValue & 0x0000ff00) >> 8;
+        &pnB = (nIntValue & 0x000000ff);
+        &pnA = 255;
+    }
+}
+
 static CPLErr GDALTerrainRgb(GDALRasterBandH hSrcBand,
+    bool bSrcHasNoData,
+    float fSrcNoDataValue,
     GDALRasterBandH hDstBandR,
     GDALRasterBandH hDstBandG,
     GDALRasterBandH hDstBandB,
@@ -2394,12 +2420,23 @@ static CPLErr GDALTerrainRgb(GDALRasterBandH hSrcBand,
     const int nXSize = GDALGetRasterBandXSize(hSrcBand);
     const int nYSize = GDALGetRasterBandYSize(hSrcBand);
 
-    // allocate buffers
+    // allocate source buffer
     std::unique_ptr<float, VSIFreeReleaser> pafSourceBuf;
     pafSourceBuf.reset(static_cast<float*>(
         VSI_MALLOC2_VERBOSE(sizeof(float), nXSize)));
-    std::unique_ptr<GByte, VSIFreeReleaser> pabyDestBufR(
+    if (pafSourceBuf == nullptr)
+        return CE_Failure;
+
+    // allocate dest buffers
+    std::unique_ptr<GByte, VSIFreeReleaser> pabyDestBuf(
         static_cast<GByte*>(VSI_MALLOC2_VERBOSE(4, nXSize)));
+    GByte *pabyDestBuf = pabyDestBuf.get();
+    if (pabyDestBuf == nullptr)
+        return CE_Failure;
+    GByte *pabyDestBufR = pabyDestBuf;
+    GByte *pabyDestBufG = pabyDestBuf + nXSize;
+    GByte *pabyDestBufB = pabyDestBuf + nXSize * 2;
+    GByte *pabyDestBufA = pabyDestBuf + nXSize * 3;
 
     pfnProgress(0.0, nullptr, pProgressData);
     for (int y = 0; y < nYSize; y++)
@@ -2413,19 +2450,45 @@ static CPLErr GDALTerrainRgb(GDALRasterBandH hSrcBand,
             return eErr;
 
         // Compute Terrain-RGB
+        int nR, nG, nB, nA;
+        const auto pafSourceBufRaw = panSourceBuf.get();
         for (int x = 0; x < nXSize; x++)
         {
-            // TODO
+            fEle = panSourceBufRaw[x];
+            GDALTerrainRgbGetRGBA(fEle,
+                bSrcHasNoData, fSrcNoDataValue,
+                &nR, &nG, &nB, &nA);
+            pabyDestBufR[x] = static_cast<GByte>(nR);
+            pabyDestBufG[x] = static_cast<GByte>(nG);
+            pabyDestBufB[x] = static_cast<GByte>(nB);
+            pabyDestBufA[x] = static_cast<GByte>(nA);
         }
 
-        // Write line to destination raster bands
+        // Write line to destination R/G/B/A bands
+        eErr = GDALRasterIO(hDstBandR, GF_Write, 0, i, nXSize, 1, pabyDestBufR,
+            nXSize, 1, GDT_UInt8, 0, 0);
+        if (eErr != CE_None) return eErr;
+        eErr = GDALRasterIO(hDstBandG, GF_Write, 0, i, nXSize, 1, pabyDestBufG,
+            nXSize, 1, GDT_UInt8, 0, 0);
+        if (eErr != CE_None) return eErr;
+        eErr = GDALRasterIO(hDstBandB, GF_Write, 0, i, nXSize, 1, pabyDestBufB,
+            nXSize, 1, GDT_UInt8, 0, 0);
+        if (eErr != CE_None) return eErr;
+        eErr = GDALRasterIO(hDstBandA, GF_Write, 0, i, nXSize, 1, pabyDestBufA,
+            nXSize, 1, GDT_UInt8, 0, 0);
+        if (eErr != CE_None) return eErr;
 
+        // Report progress
+        if (!pfnProgress(1.0*(y+1)/nYSize, nullptr, pProgressData))
+        {
+            CPLError(CE_Failure, CPLE_UserInterrupt, "User terminated");
+            return CE_Failure;
+        }
     }
 
-
+    pfnProgress(1.0, nullptr, pProgressData);
     return CE_None;
 }
-
 
 
 /************************************************************************/
