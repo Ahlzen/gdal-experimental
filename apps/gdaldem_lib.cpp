@@ -2378,25 +2378,25 @@ static bool GDALGenerateVRTColorRelief(const char *pszDstFilename,
 
 static void GDALTerrainRgbGetRGBA(float fEle,
     bool bHasNoData, float fNoDataValue,
-    int *pnR, int *pnG, int *pngB, int *pngA)
+    int *pnR, int *pnG, int *pnB, int *pnA)
 {
     // encode elevation into R, G, B, A channels
-    if (bHasNoData && dfEle == fNoDataValue)
+    if (bHasNoData && fEle == fNoDataValue)
     {
-        &pnR = &pnG = &pnB = &pnA = 0; // fully transparent
+        *pnR = *pnG = *pnB = *pnA = 0; // fully transparent
     }
     else
     {
         // Calculate integer value as
         // ele = -10000 + ((R * 256 * 256 + G * 256 + B) * 0.1)
         // => R*65536 + G*256 + B = 10 * (ele + 10000)
-        uint32_t nIntValue = (uint32_t)(10f * (fEle + 10000f));
+        auto nIntValue = static_cast<uint32_t>(10.0f * (fEle + 10'000.0f));
 
         // encode lower 24 bits into 8-bit R, G, B channels
-        &pnR = (nIntValue & 0x00ff0000) >> 16;
-        &pnG = (nIntValue & 0x0000ff00) >> 8;
-        &pnB = (nIntValue & 0x000000ff);
-        &pnA = 255;
+        *pnR = (nIntValue & 0x00ff0000) >> 16;
+        *pnG = (nIntValue & 0x0000ff00) >> 8;
+        *pnB = (nIntValue & 0x000000ff);
+        *pnA = 255;
     }
 }
 
@@ -2430,20 +2430,19 @@ static CPLErr GDALTerrainRgb(GDALRasterBandH hSrcBand,
     // allocate dest buffers
     std::unique_ptr<GByte, VSIFreeReleaser> pabyDestBuf(
         static_cast<GByte*>(VSI_MALLOC2_VERBOSE(4, nXSize)));
-    GByte *pabyDestBuf = pabyDestBuf.get();
-    if (pabyDestBuf == nullptr)
+    GByte *pabyDestBufR = pabyDestBuf.get();
+    if (pabyDestBufR == nullptr)
         return CE_Failure;
-    GByte *pabyDestBufR = pabyDestBuf;
-    GByte *pabyDestBufG = pabyDestBuf + nXSize;
-    GByte *pabyDestBufB = pabyDestBuf + nXSize * 2;
-    GByte *pabyDestBufA = pabyDestBuf + nXSize * 3;
+    GByte *pabyDestBufG = pabyDestBufR + nXSize;
+    GByte *pabyDestBufB = pabyDestBufR + nXSize * 2;
+    GByte *pabyDestBufA = pabyDestBufR + nXSize * 3;
 
     pfnProgress(0.0, nullptr, pProgressData);
     for (int y = 0; y < nYSize; y++)
     {
         // Read line from source raster
         CPLErr eErr = GDALRasterIO(
-            hSrcBand, GF_Read, 0, i, nXSize, 1,
+            hSrcBand, GF_Read, 0, y, nXSize, 1,
             static_cast<void*>(pafSourceBuf.get()),
             nXSize, 1, GDT_Float32, 0, 0);
         if (eErr != CE_None)
@@ -2451,10 +2450,10 @@ static CPLErr GDALTerrainRgb(GDALRasterBandH hSrcBand,
 
         // Compute Terrain-RGB
         int nR, nG, nB, nA;
-        const auto pafSourceBufRaw = panSourceBuf.get();
+        const auto pafSourceBufRaw = pafSourceBuf.get();
         for (int x = 0; x < nXSize; x++)
         {
-            fEle = panSourceBufRaw[x];
+            float fEle = pafSourceBufRaw[x];
             GDALTerrainRgbGetRGBA(fEle,
                 bSrcHasNoData, fSrcNoDataValue,
                 &nR, &nG, &nB, &nA);
@@ -2465,16 +2464,16 @@ static CPLErr GDALTerrainRgb(GDALRasterBandH hSrcBand,
         }
 
         // Write line to destination R/G/B/A bands
-        eErr = GDALRasterIO(hDstBandR, GF_Write, 0, i, nXSize, 1, pabyDestBufR,
+        eErr = GDALRasterIO(hDstBandR, GF_Write, 0, y, nXSize, 1, pabyDestBufR,
             nXSize, 1, GDT_UInt8, 0, 0);
         if (eErr != CE_None) return eErr;
-        eErr = GDALRasterIO(hDstBandG, GF_Write, 0, i, nXSize, 1, pabyDestBufG,
+        eErr = GDALRasterIO(hDstBandG, GF_Write, 0, y, nXSize, 1, pabyDestBufG,
             nXSize, 1, GDT_UInt8, 0, 0);
         if (eErr != CE_None) return eErr;
-        eErr = GDALRasterIO(hDstBandB, GF_Write, 0, i, nXSize, 1, pabyDestBufB,
+        eErr = GDALRasterIO(hDstBandB, GF_Write, 0, y, nXSize, 1, pabyDestBufB,
             nXSize, 1, GDT_UInt8, 0, 0);
         if (eErr != CE_None) return eErr;
-        eErr = GDALRasterIO(hDstBandA, GF_Write, 0, i, nXSize, 1, pabyDestBufA,
+        eErr = GDALRasterIO(hDstBandA, GF_Write, 0, y, nXSize, 1, pabyDestBufA,
             nXSize, 1, GDT_UInt8, 0, 0);
         if (eErr != CE_None) return eErr;
 
@@ -4351,9 +4350,11 @@ GDALDatasetH GDALDEMProcessing(const char *pszDest, GDALDatasetH hSrcDataset,
     else if (eUtilityMode == TERRAIN_RGB)
     {
         GDALTerrainRgb(hSrcBand,
+            false, 0, // TODO: support
             GDALGetRasterBand(hDstDataset, 1),
             GDALGetRasterBand(hDstDataset, 2),
             GDALGetRasterBand(hDstDataset, 3),
+            GDALGetRasterBand(hDstDataset, 4), // TODO: implement addAlpha option?
             pfnProgress, pProgressData);
     }
     else
