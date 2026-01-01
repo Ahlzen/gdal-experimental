@@ -80,6 +80,13 @@ Generate a roughness map:
      gdaldem roughness <input_dem> <output_roughness_map>
                  [-compute_edges] [-b <band>] [-of <format>] [-co <NAME>=<VALUE>]... [-q]
 
+Generate a Terrain-RGB encoded elevation map:
+
+.. code-block::
+
+     gdaldem terrain-rgb <input_dem> <output_terrain_rgb_map>
+                 [-compute_edges] [-b <band>] [-of <format>] [-co <NAME>=<VALUE>]... [-q]
+
 Description
 -----------
 
@@ -138,6 +145,10 @@ grid using gdalwarp before using gdaldem.
 
         Generate a map of roughness from any GDAL-supported elevation raster.
 
+    * ``terrain-rgb``
+
+        Generate a Terrain-RGB encoded elevation map from any GDAL-supported elevation raster.
+
 .. tip:: Equivalent in new "gdal" command line interface:
 
     - :ref:`gdal_raster_aspect`
@@ -180,8 +191,8 @@ The following general options are available:
 
     Suppress progress monitor and other non-error output.
 
-For all algorithms, except color-relief, a nodata value in the target dataset
-will be emitted if at least one pixel set to the nodata value is found in the
+For all algorithms, except color-relief and terrain-rgb, a nodata value in the target
+dataset will be emitted if at least one pixel set to the nodata value is found in the
 3x3 window centered around each source pixel. The consequence is that there
 will be a 1-pixel border around each image set with nodata value.
 
@@ -501,6 +512,15 @@ The value -9999 is used as the output nodata value.
 
 There are no specific options.
 
+terrain-rgb
+^^^^^^^^^^^
+
+This command outputs a RGB or RGBA raster with the elevation for each point
+encoded in the R, G and B channels, according to the Terrain-RGB format as originally
+specified by MapBox:
+
+There are no specific options.
+
 C API
 -----
 
@@ -510,7 +530,8 @@ Authors
 -------
 
 Matthew Perry perrygeo@gmail.com, Even Rouault even.rouault@spatialys.com,
-Howard Butler hobu.inc@gmail.com, Chris Yesson chris.yesson@ioz.ac.uk
+Howard Butler hobu.inc@gmail.com, Chris Yesson chris.yesson@ioz.ac.uk,
+Lars Ahlzen lars@ahlzen.com
 
 Derived from code by Michael Shapiro, Olga Waupotitsch, Marjorie Larson, Jim Westervelt:
 U.S. Army CERL, 1993. GRASS 4.1 Reference Manual. U.S. Army Corps of Engineers,

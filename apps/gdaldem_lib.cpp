@@ -3619,7 +3619,7 @@ static std::unique_ptr<GDALArgumentParser> GDALDEMAppOptionsGetParser(
     auto subCommandTerrainRgb = argParser->add_subparser(
         "terrain-rgb", /* bForBinary=*/psOptionsForBinary != nullptr);
     subCommandTerrainRgb->add_description(
-        _("Compute terrain-RGB elevation encoding"));
+        _("Compute Terrain-RGB elevation encoding."));
     if (psOptionsForBinary)
     {
         subCommandTerrainRgb->add_argument("input_dem")
