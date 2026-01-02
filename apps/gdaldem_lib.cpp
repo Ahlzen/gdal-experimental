@@ -2406,13 +2406,13 @@ static CPLErr GDALTerrainRgb(GDALRasterBandH hSrcBand,
     GDALRasterBandH hDstBandR,
     GDALRasterBandH hDstBandG,
     GDALRasterBandH hDstBandB,
-    GDALRasterBandH hDstBandA,
+    GDALRasterBandH hDstBandA, // may be null
     GDALProgressFunc pfnProgress,
     void* pProgressData)
 {
     // sanity check
     if (hSrcBand == nullptr || hDstBandR == nullptr ||
-        hDstBandG == nullptr || hDstBandB == nullptr || hDstBandA == nullptr)
+        hDstBandG == nullptr || hDstBandB == nullptr)
         return CE_Failure;
     if (pfnProgress == nullptr)
         pfnProgress = GDALDummyProgress;
@@ -2473,9 +2473,10 @@ static CPLErr GDALTerrainRgb(GDALRasterBandH hSrcBand,
         eErr = GDALRasterIO(hDstBandB, GF_Write, 0, y, nXSize, 1, pabyDestBufB,
             nXSize, 1, GDT_UInt8, 0, 0);
         if (eErr != CE_None) return eErr;
-        eErr = GDALRasterIO(hDstBandA, GF_Write, 0, y, nXSize, 1, pabyDestBufA,
-            nXSize, 1, GDT_UInt8, 0, 0);
-        if (eErr != CE_None) return eErr;
+        if (hDstBandA != nullptr) // dest raster has alpha channel
+            eErr = GDALRasterIO(hDstBandA, GF_Write, 0, y, nXSize, 1, pabyDestBufA,
+                nXSize, 1, GDT_UInt8, 0, 0);
+            if (eErr != CE_None) return eErr;
 
         // Report progress
         if (!pfnProgress(1.0*(y+1)/nYSize, nullptr, pProgressData))
@@ -4319,7 +4320,8 @@ GDALDatasetH GDALDEMProcessing(const char *pszDest, GDALDatasetH hSrcDataset,
     }
 
     const int nDstBands =
-        eUtilityMode == COLOR_RELIEF ? ((psOptions->bAddAlpha) ? 4 : 3) : 1;
+        (eUtilityMode == COLOR_RELIEF || eUtilityMode == TERRAIN_RGB) ?
+        ((psOptions->bAddAlpha) ? 4 : 3) : 1;
 
     GDALDatasetH hDstDataset =
         GDALCreate(hDriver, pszDest, nXSize, nYSize, nDstBands, eDstDataType,
@@ -4354,7 +4356,7 @@ GDALDatasetH GDALDEMProcessing(const char *pszDest, GDALDatasetH hSrcDataset,
             GDALGetRasterBand(hDstDataset, 1),
             GDALGetRasterBand(hDstDataset, 2),
             GDALGetRasterBand(hDstDataset, 3),
-            GDALGetRasterBand(hDstDataset, 4), // TODO: implement addAlpha option?
+            psOptions->bAddAlpha ? GDALGetRasterBand(hDstDataset, 4) : nullptr,
             pfnProgress, pProgressData);
     }
     else
