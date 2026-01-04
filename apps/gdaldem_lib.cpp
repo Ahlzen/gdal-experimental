@@ -4172,7 +4172,8 @@ GDALDatasetH GDALDEMProcessing(const char *pszDest, GDALDatasetH hSrcDataset,
     }
 
     const GDALDataType eDstDataType =
-        (eUtilityMode == HILL_SHADE || eUtilityMode == COLOR_RELIEF)
+        (eUtilityMode == HILL_SHADE || eUtilityMode == COLOR_RELIEF ||
+        eUtilityMode == TERRAIN_RGB)
             ? GDT_UInt8
             : GDT_Float32;
 
