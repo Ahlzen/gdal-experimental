@@ -216,7 +216,8 @@ RUN --mount=type=cache,id=ubuntu-small-gdal,target=$HOME/.cache \
     && mv /build/usr/bin                    /build_gdal_version_changing/usr \
     && for i in /build_gdal_version_changing/usr/lib/${GCC_ARCH}-linux-gnu/*; do ${GCC_ARCH}-linux-gnu-strip -s $i 2>/dev/null || /bin/true; done \
     && for i in /build_gdal_python/usr/lib/python3/dist-packages/osgeo/*.so; do ${GCC_ARCH}-linux-gnu-strip -s $i 2>/dev/null || /bin/true; done \
-    && for i in /build_gdal_version_changing/usr/bin/*; do ${GCC_ARCH}-linux-gnu-strip -s $i 2>/dev/null || /bin/true; done
+    && for i in /build_gdal_version_changing/usr/bin/*; do ${GCC_ARCH}-linux-gnu-strip -s $i 2>/dev/null || /bin/true; done \
+    && rm /build${PROJ_INSTALL_PREFIX}/lib/pkgconfig/proj.pc
 
 # Build final image
 FROM $TARGET_BASE_IMAGE AS runner
@@ -233,7 +234,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     # PROJ dependencies
     && apt-get install -y --no-install-recommends \
         libsqlite3-0 libtiff6 libcurl4 \
-        curl unzip ca-certificates \
+        unzip ca-certificates \
     # GDAL dependencies
     && apt-get install -y --no-install-recommends \
         bash-completion python3-numpy libpython3.12 \

@@ -249,7 +249,8 @@ class PDFDataset final : public GDALPamDataset
     int m_nBlockYSize = 0;
     int CheckTiledRaster();
 
-    void GuessDPI(GDALPDFDictionary *poPageDict, int *pnBands);
+    void GuessDPIAndBandCount(GDALPDFDictionary *poPageDict, double &dfPI,
+                              int &nBandsGuessed);
     void FindXMP(GDALPDFObject *poObj);
     void ParseInfo(GDALPDFObject *poObj);
 
@@ -357,7 +358,7 @@ class PDFDataset final : public GDALPamDataset
     double m_dfPageHeight = 0;
     void PDFCoordsToSRSCoords(double x, double y, double &X, double &Y);
 
-    std::map<int, OGRGeometry *> m_oMapMCID{};
+    std::map<int, std::unique_ptr<OGRGeometry>> m_oMapMCID{};
     void CleanupIntermediateResources();
 
     std::map<CPLString, int> m_oMapOperators{};
@@ -400,8 +401,9 @@ class PDFDataset final : public GDALPamDataset
         const std::map<std::pair<int, int>, OGRPDFLayer *> &oMapNumGenToLayer,
         const GraphicState &graphicStateIn, OGRPDFLayer *poCurLayer,
         int nRecLevel);
-    OGRGeometry *BuildGeometry(std::vector<double> &oCoords, int bHasFoundFill,
-                               int bHasMultiPart);
+    std::unique_ptr<OGRGeometry> BuildGeometry(std::vector<double> &oCoords,
+                                               int bHasFoundFill,
+                                               int bHasMultiPart);
 
     bool OpenVectorLayers(GDALPDFDictionary *poPageDict);
 
@@ -494,6 +496,8 @@ class PDFRasterBand CPL_NON_FINAL : public GDALPamRasterBand
     int nResolutionLevel;
 
     CPLErr IReadBlockFromTile(int, int, void *);
+
+    void SetSize(int nXSize, int nYSize);
 
   public:
     PDFRasterBand(PDFDataset *, int, int);

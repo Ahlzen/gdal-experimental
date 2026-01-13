@@ -642,6 +642,7 @@ static bool
 GTIDoPaletteExpansionIfNeeded(std::shared_ptr<GDALDataset> &poTileDS,
                               int nBandCount)
 {
+    bool bRet = true;
     if (poTileDS->GetRasterCount() == 1 &&
         (nBandCount == 3 || nBandCount == 4) &&
         poTileDS->GetRasterBand(1)->GetColorTable() != nullptr)
@@ -661,14 +662,10 @@ GTIDoPaletteExpansionIfNeeded(std::shared_ptr<GDALDataset> &poTileDS,
             GDALTranslate("", GDALDataset::ToHandle(poTileDS.get()), psOptions,
                           &bUsageError)));
         GDALTranslateOptionsFree(psOptions);
-        if (!poRGBDS)
-        {
-            return false;
-        }
-
-        poTileDS.reset(poRGBDS.release());
+        bRet = poRGBDS != nullptr;
+        poTileDS = std::move(poRGBDS);
     }
-    return true;
+    return bRet;
 }
 
 /************************************************************************/
@@ -1404,8 +1401,8 @@ bool GDALTileIndexDataset::Open(GDALOpenInfo *poOpenInfo)
                         m_poWarpedLayerKeeper =
                             std::make_unique<OGRWarpedLayer>(
                                 m_poLayer, /* iGeomField = */ 0,
-                                /* bTakeOwnership = */ false, poCT.release(),
-                                poInvCT.release());
+                                /* bTakeOwnership = */ false, std::move(poCT),
+                                std::move(poInvCT));
                         m_poLayer = m_poWarpedLayerKeeper.get();
                         poLayerDefn = m_poLayer->GetLayerDefn();
                     }
@@ -1539,7 +1536,7 @@ bool GDALTileIndexDataset::Open(GDALOpenInfo *poOpenInfo)
                 return false;
             }
 
-            poTileDS.reset(poWarpDS.release());
+            poTileDS = std::move(poWarpDS);
             poTileSRS = poTileDS->GetSpatialRef();
             CPL_IGNORE_RET_VAL(poTileSRS);
         }
@@ -3664,7 +3661,7 @@ bool GDALTileIndexDataset::GetSourceDesc(const std::string &osTileName,
                 return false;
             }
 
-            poTileDS.reset(poWarpDS.release());
+            poTileDS = std::move(poWarpDS);
         }
 
         if (pMutex)
